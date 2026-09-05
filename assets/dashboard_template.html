@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crypto Volatility &amp; Hedging Decision Dashboard</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #12161f;
+    --panel-2: #171c27;
+    --ink: #eef1f6;
+    --muted: #8b94a7;
+    --line: #232a38;
+    --accent: #4fb0ff;
+    --good: #34d399;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --review: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    line-height: 1.45;
+  }
+  .shell { max-width: 1280px; margin: 0 auto; padding: 28px 20px 60px; }
+  .banner {
+    background: linear-gradient(90deg, rgba(251,191,36,0.14), rgba(251,191,36,0.03));
+    border: 1px solid rgba(251,191,36,0.35);
+    color: #fde68a;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    margin-bottom: 22px;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 0.92rem; margin-bottom: 26px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .card h2 { font-size: 1.15rem; margin: 0 0 2px; display: flex; align-items: center; gap: 10px; }
+  .spot { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 999px;
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em;
+    border: 1px solid var(--line); background: var(--panel-2);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .regime-stress .dot, .decision-REVIEW .dot { background: var(--bad); }
+  .regime-high_vol .dot { background: var(--warn); }
+  .regime-normal .dot { background: var(--accent); }
+  .regime-low_vol .dot { background: var(--good); }
+  .decision-HEDGE .dot { background: var(--bad); }
+  .decision-WAIT .dot { background: var(--good); }
+  .decision-REVIEW .dot { background: var(--review); }
+  .rationale {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; font-size: 0.86rem; color: #d6dbe6; margin-bottom: 16px;
+  }
+  svg.chart { width: 100%; height: 120px; display: block; }
+  .chart-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 14px 0 4px; }
+  table.vol-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 6px; }
+  table.vol-table td { padding: 5px 0; border-bottom: 1px solid var(--line); }
+  table.vol-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .quality-row { display: flex; gap: 14px; font-size: 0.78rem; color: var(--muted); margin-top: 12px; }
+  .quality-row b { color: var(--ink); }
+  details { margin-top: 14px; }
+  summary { cursor: pointer; font-size: 0.82rem; color: var(--accent); }
+  pre.report {
+    white-space: pre-wrap; font-size: 0.76rem; color: #c7cde0;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px; margin-top: 10px; max-height: 340px; overflow: auto;
+  }
+  .history { margin-top: 32px; }
+  .history table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .history th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .history td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  footer { margin-top: 40px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); padding-top: 16px; }
+  footer a { color: var(--accent); }
+  .empty { color: var(--muted); padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="banner">⚠ SYNTHETIC DEMO DATA — every price, decision, and portfolio value on this page is generated offline and does not reflect real markets or a live account.</div>
+  <h1>Crypto Volatility &amp; Hedging Decision Dashboard</h1>
+  <div class="sub">Rendered locally by <code>python -m src.demo</code> — no network access, no cloud credentials.</div>
+  <div id="root" class="grid"></div>
+  <div class="history" id="history"></div>
+  <footer>
+    Generated from the offline demo pipeline. Thresholds are a documented dummy baseline (full-sample calibration —
+    see <a href="docs/limitations.md">docs/limitations.md</a>) and decisions are illustrative, not investment advice.
+  </footer>
+</div>
+
+<script>
+const DATA = /*__DEMO_DATA__*/null;
+
+function fmtPct(x) { return (x * 100).toFixed(1) + '%'; }
+function fmtUsd(x) { return '$' + Number(x).toLocaleString(undefined, {maximumFractionDigits: 0}); }
+
+function sparkline(values, w, h, color) {
+  const clean = values.map((v, i) => [i, v]).filter(([, v]) => v !== null && v !== undefined && !Number.isNaN(v));
+  if (clean.length < 2) return '<div class="empty">not enough data</div>';
+  const xs = clean.map(d => d[0]);
+  const ys = clean.map(d => d[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const rangeY = (maxY - minY) || 1;
+  const pts = clean.map(([x, y]) => {
+    const px = ((x - minX) / (maxX - minX || 1)) * (w - 4) + 2;
+    const py = h - 4 - ((y - minY) / rangeY) * (h - 8);
+    return `${px.toFixed(1)},${py.toFixed(1)}`;
+  }).join(' ');
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" />
+  </svg>`;
+}
+
+function assetCard(r) {
+  if (!r || r.error) {
+    return `<div class="card"><h2>${r ? r.symbol : ''}</h2><div class="empty">${r ? r.error : 'no data'}</div></div>`;
+  }
+  const regimeClass = 'regime-' + r.regime.label;
+  const decisionClass = 'decision-' + r.decision.action;
+  return `
+  <div class="card">
+    <h2>${r.symbol}</h2>
+    <div class="spot">Synthetic spot: ${fmtUsd(r.spot)}</div>
+    <div class="badges">
+      <span class="badge ${regimeClass}"><span class="dot"></span>${r.regime.label.toUpperCase()} (${(r.regime.confidence*100).toFixed(0)}% conf.)</span>
+      <span class="badge ${decisionClass}"><span class="dot"></span>${r.decision.action}</span>
+      ${r.regime.direction_state ? `<span class="badge">5d trend: ${r.regime.direction_state}</span>` : ''}
+    </div>
+    <div class="rationale">${r.decision.rationale}</div>
+
+    <div class="chart-label">Close price (last ${r.chart.close.length} bars)</div>
+    ${sparkline(r.chart.close, 560, 90, '#4fb0ff')}
+    <div class="chart-label">EWMA annualized volatility</div>
+    ${sparkline(r.chart.ewma_vol_annualized, 560, 70, '#fbbf24')}
+
+    <div class="chart-label">Volatility estimator comparison (annualized)</div>
+    <table class="vol-table">
+      <tr><td>Naive realized (24h window)</td><td>${fmtPct(r.volatility.naive_annualized)}</td></tr>
+      <tr><td>Yang-Zhang (24h window)</td><td>${fmtPct(r.volatility.yang_zhang_annualized)}</td></tr>
+      <tr><td>EWMA (λ=0.94)</td><td>${fmtPct(r.volatility.ewma_annualized)}</td></tr>
+    </table>
+
+    <div class="quality-row">
+      <span>Data quality — <b>${r.data_quality.n_bars}</b> bars</span>
+      <span style="color:${r.data_quality.fatal ? 'var(--bad)' : 'var(--muted)'}">FATAL: <b>${r.data_quality.fatal}</b></span>
+      <span>WARNING: <b>${r.data_quality.warning}</b></span>
+      <span>ANOMALY: <b>${r.data_quality.market_anomaly}</b></span>
+      <span>Threshold events: <b>${r.thresholds.n_events}</b></span>
+    </div>
+
+    <details>
+      <summary>Full decision report</summary>
+      <pre class="report">${r.report.report_id ? JSON.stringify(r.report, null, 2) : ''}</pre>
+    </details>
+  </div>`;
+}
+
+function historySection(data) {
+  const rows = [];
+  for (const symbol of Object.keys(data)) {
+    const r = data[symbol];
+    if (!r || r.error || !r.report || !r.report.recent_actions) continue;
+    for (const line of r.report.recent_actions) {
+      rows.push(`<tr><td>${symbol}</td><td>${line}</td></tr>`);
+    }
+  }
+  if (!rows.length) return '';
+  return `<h2>Decision history (this run's asset)</h2>
+    <table><thead><tr><th>Asset</th><th>Entry</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+}
+
+function render() {
+  const root = document.getElementById('root');
+  const hist = document.getElementById('history');
+  if (!DATA) {
+    root.innerHTML = '<div class="empty">No demo data embedded. Run: python -m src.demo</div>';
+    return;
+  }
+  root.innerHTML = Object.keys(DATA).map(sym => assetCard(DATA[sym])).join('');
+  hist.innerHTML = historySection(DATA);
+}
+render();
+</script>
+</body>
+</html>
